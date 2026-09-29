@@ -1,5 +1,9 @@
+// Keep the Nest import visible to Vercel's NestJS entrypoint detector.
+import { NestFactory } from '@nestjs/core';
 import { env } from './config/env.js';
 import { createNestHttpApp } from './nest.js';
+
+void NestFactory;
 
 const app = await createNestHttpApp();
 const server = app.listen(env.PORT, () => {
