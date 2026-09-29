@@ -178,6 +178,38 @@ export class InstructorCoursesController {
       );
   }
 
+  @Post(':id/modules/:moduleId/material-upload-url')
+  async moduleMaterialUploadUrl(
+    @Param('id') id: string,
+    @Param('moduleId') moduleId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    return response
+      .status(201)
+      .json(
+        await this.courseContent.createModuleMaterialUploadUrl(
+          id,
+          moduleId,
+          request,
+        ),
+      );
+  }
+
+  @Post(':id/modules/:moduleId/material-complete')
+  async completeModuleMaterialUpload(
+    @Param('id') id: string,
+    @Param('moduleId') moduleId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    return response
+      .status(200)
+      .json(
+        await this.courseContent.saveModuleMaterialRef(id, moduleId, request),
+      );
+  }
+
   @Delete(':id/modules/:moduleId/material')
   async deleteModuleMaterial(
     @Param('id') id: string,

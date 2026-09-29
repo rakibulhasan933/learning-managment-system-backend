@@ -119,6 +119,93 @@ function sanitizeFileName(fileName: string) {
     .slice(0, 120);
 }
 
+function validateLectureMaterialType(kind: 'pdf' | 'slides', contentType: string) {
+  const allowedContentTypes =
+    kind === 'pdf'
+      ? ['application/pdf']
+      : [
+          'application/pdf',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.oasis.opendocument.presentation',
+        ];
+
+  if (!allowedContentTypes.includes(contentType)) {
+    throw new HttpError(
+      400,
+      kind === 'pdf'
+        ? 'Lecture PDF must be an application/pdf file.'
+        : 'Lecture slides must be a PDF, PPT, PPTX, or ODP file.',
+    );
+  }
+}
+
+export async function createLectureMaterialUploadUrl({
+  courseId,
+  fileName,
+  kind,
+  contentType,
+  resourceId,
+}: {
+  courseId: string;
+  fileName: string;
+  kind: 'pdf' | 'slides';
+  contentType: string;
+  resourceId: string;
+}) {
+  validateLectureMaterialType(kind, contentType);
+  const storage = getSupabaseStorageUrl();
+  const bucket =
+    env.SUPABASE_STORAGE_LECTURE_MATERIALS_BUCKET ??
+    defaultLectureMaterialsBucket;
+
+  await ensureStorageBucket({
+    bucket,
+    isPublic: true,
+    serviceRoleKey: storage.serviceRoleKey,
+    url: storage.url,
+  });
+
+  const extension =
+    fileName.split('.').pop()?.replace(/[^a-z0-9]/gi, '').toLowerCase() ||
+    (kind === 'pdf' ? 'pdf' : 'pptx');
+  const objectKey = `${courseId}/${resourceId}/${kind}-${randomUUID()}.${extension}`;
+  const signUrl = new URL(
+    `/storage/v1/object/upload/sign/${bucket}/${objectKey}`,
+    storage.url,
+  );
+  const response = await fetch(signUrl, {
+    headers: {
+      Authorization: `Bearer ${storage.serviceRoleKey}`,
+      apikey: storage.serviceRoleKey,
+    },
+    method: 'POST',
+  });
+  const payload = (await response.json().catch(() => null)) as {
+    token?: string;
+  } | null;
+  if (!response.ok || !payload?.token) {
+    throw new HttpError(502, 'Supabase signed upload URL could not be created.');
+  }
+
+  const uploadUrl = new URL(
+    `/storage/v1/object/upload/sign/${bucket}/${objectKey}?token=${encodeURIComponent(payload.token)}`,
+    storage.url,
+  );
+  const publicUrl = new URL(
+    `/storage/v1/object/public/${bucket}/${objectKey}`,
+    storage.url,
+  );
+
+  return {
+    expiresInSeconds: 15 * 60,
+    headers: { 'Content-Type': contentType },
+    objectKey,
+    publicUrl: publicUrl.toString(),
+    uploadUrl: uploadUrl.toString(),
+  };
+}
+
 async function uploadPublicObject({
   body,
   bucket,

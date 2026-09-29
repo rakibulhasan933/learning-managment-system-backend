@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { asc, eq, modules, sections, sql } from '../../database/index.js';
+import { asc, eq, modules, sections, sql, videos } from '../../database/index.js';
 import { z } from 'zod';
 import { AuthService } from '../../auth/auth.service.js';
 import { db } from '../../lib/database.js';
@@ -31,13 +31,24 @@ export class CourseOutline {
       .orderBy(asc(sections.position));
     return {
       milestones: await Promise.all(
-        rows.map(async (milestone) => ({
+      rows.map(async (milestone) => ({
           ...milestone,
-          modules: await db
+          modules: await Promise.all(
+            (
+              await db
             .select()
             .from(modules)
             .where(eq(modules.milestoneId, milestone.id))
-            .orderBy(asc(modules.position)),
+            .orderBy(asc(modules.position))
+            ).map(async (module) => ({
+              ...module,
+              videos: await db
+                .select()
+                .from(videos)
+                .where(eq(videos.moduleId, module.id))
+                .orderBy(asc(videos.position)),
+            })),
+          ),
         })),
       ),
     };
@@ -74,6 +85,9 @@ export class CourseOutline {
         title: z.string().trim().min(1).optional(),
         description: z.string().nullable().optional(),
         position: z.number().int().nonnegative().optional(),
+        contentTypes: z
+          .array(z.enum(['video', 'pdf', 'quiz', 'assignment']))
+          .optional(),
       })
       .parse(request.body);
     const [updated] = await db

@@ -16,7 +16,10 @@ import { videoProviders } from '../../types/index.js';
 import { AuthService } from '../../auth/auth.service.js';
 import { db as database } from '../../lib/database.js';
 import { z } from 'zod';
-import { uploadLectureMaterial } from '../../lib/supabase-storage.js';
+import {
+  createLectureMaterialUploadUrl,
+  uploadLectureMaterial,
+} from '../../lib/supabase-storage.js';
 import {
   createLectureVideoKey,
   createR2UploadUrl,
@@ -185,6 +188,49 @@ export class CourseContent {
       .set({ pdfUrl: url, slidesUrl: null })
       .where(eq(modules.id, moduleId));
     return { url };
+  }
+
+  async createModuleMaterialUploadUrl(
+    courseId: string,
+    moduleId: string,
+    request: Request,
+  ) {
+    const profile = await this.requireStaff(request);
+    await this.assertModule(courseId, moduleId, profile.id);
+    const input = z
+      .object({
+        contentType: z.string().min(1),
+        fileName: z.string().trim().min(1).max(255),
+        kind: z.enum(['pdf', 'slides']),
+      })
+      .parse(request.body);
+    return createLectureMaterialUploadUrl({
+      contentType: input.contentType,
+      courseId,
+      fileName: input.fileName,
+      kind: input.kind,
+      resourceId: moduleId,
+    });
+  }
+
+  async saveModuleMaterialRef(
+    courseId: string,
+    moduleId: string,
+    request: Request,
+  ) {
+    const profile = await this.requireStaff(request);
+    await this.assertModule(courseId, moduleId, profile.id);
+    const input = z
+      .object({
+        kind: z.enum(['pdf', 'slides']),
+        url: z.string().url(),
+      })
+      .parse(request.body);
+    await database
+      .update(modules)
+      .set(input.kind === 'pdf' ? { pdfUrl: input.url } : { slidesUrl: input.url })
+      .where(eq(modules.id, moduleId));
+    return { url: input.url };
   }
 
   async deleteModuleMaterial(
