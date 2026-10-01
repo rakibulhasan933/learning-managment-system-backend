@@ -169,6 +169,8 @@ export const courses = pgTable(
     currency: varchar('currency', { length: 3 }).notNull().default('BDT'),
     thumbnailUrl: text('thumbnail_url'),
     status: courseStatusEnum('status').notNull().default('draft'),
+    enrollmentEnabled: boolean('enrollment_enabled').notNull().default(true),
+    enrollmentEndsAt: timestamp('enrollment_ends_at', { withTimezone: true }),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

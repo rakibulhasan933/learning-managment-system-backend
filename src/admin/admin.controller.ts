@@ -16,6 +16,7 @@ import { AdminCourses } from './admin-courses/admin-courses.js';
 import { AdminSettings } from './admin-settings/admin-settings.js';
 import { AdminUsers } from './admin-users/admin-users.js';
 import { AdminFinance } from './admin-finance/admin-finance.js';
+import { AdminCoupons } from './admin-coupons/admin-coupons.js';
 import { AuthGuard } from '../common/guards/auth.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
@@ -30,6 +31,7 @@ export class AdminController {
     private readonly adminSettings: AdminSettings,
     private readonly adminUsers: AdminUsers,
     private readonly adminFinance: AdminFinance,
+    private readonly adminCoupons: AdminCoupons,
   ) {}
 
   @Get('health')
@@ -93,6 +95,11 @@ export class AdminController {
     return response
       .status(200)
       .json(await this.adminSettings.settings(request));
+  }
+
+  @Get('coupons/usage')
+  async couponUsage(@Req() request: Request, @Res() response: Response) {
+    return response.status(200).json(await this.adminCoupons.usage(request));
   }
   @Put('settings')
   async updateSettings(@Req() request: Request, @Res() response: Response) {
@@ -174,6 +181,26 @@ export class AdminController {
     @Res() response: Response,
   ) {
     await this.adminCourses.setApproval(id, 'approve', request);
+    return response.status(204).send();
+  }
+
+  @Patch('courses/:id/enrollment-settings')
+  async updateEnrollmentSettings(
+    @Param('id') id: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    await this.adminCourses.updateEnrollmentSettings(id, request);
+    return response.status(204).send();
+  }
+
+  @Patch('courses/:id/category')
+  async updateCourseCategory(
+    @Param('id') id: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    await this.adminCourses.updateCourseCategory(id, request);
     return response.status(204).send();
   }
 

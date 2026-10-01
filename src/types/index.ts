@@ -89,6 +89,8 @@ export interface CourseSummaryDto {
   level: CourseLevel;
   price: string;
   currency: string;
+  enrollmentEnabled: boolean;
+  enrollmentEndsAt: string | null;
   thumbnailUrl: string | null;
   instructorName: string | null;
   publishedAt: string | null;

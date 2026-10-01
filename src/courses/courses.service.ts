@@ -45,6 +45,8 @@ function serializeDate(value: Date | null) {
 function toCourseSummary(row: {
   category: string | null;
   currency: string;
+  enrollmentEnabled: boolean;
+  enrollmentEndsAt: Date | null;
   id: string;
   instructorName: string | null;
   level: CourseSummaryDto['level'];
@@ -58,6 +60,8 @@ function toCourseSummary(row: {
   return {
     category: row.category,
     currency: row.currency,
+    enrollmentEnabled: row.enrollmentEnabled,
+    enrollmentEndsAt: serializeDate(row.enrollmentEndsAt),
     id: row.id,
     instructorName: row.instructorName,
     level: row.level,
@@ -117,6 +121,8 @@ export class CoursesService {
       .select({
         category: courses.category,
         currency: courses.currency,
+        enrollmentEnabled: courses.enrollmentEnabled,
+        enrollmentEndsAt: courses.enrollmentEndsAt,
         id: courses.id,
         instructorName: profiles.fullName,
         level: courses.level,
@@ -209,6 +215,8 @@ export class CoursesService {
         category: courses.category,
         currency: courses.currency,
         description: courses.description,
+        enrollmentEnabled: courses.enrollmentEnabled,
+        enrollmentEndsAt: courses.enrollmentEndsAt,
         id: courses.id,
         instructorName: profiles.fullName,
         level: courses.level,

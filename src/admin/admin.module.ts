@@ -6,6 +6,7 @@ import { AdminUsers } from './admin-users/admin-users.js';
 import { AdminCourses } from './admin-courses/admin-courses.js';
 import { AdminFinance } from './admin-finance/admin-finance.js';
 import { AdminSettings } from './admin-settings/admin-settings.js';
+import { AdminCoupons } from './admin-coupons/admin-coupons.js';
 
 @Module({
   imports: [AuthModule],
@@ -16,6 +17,7 @@ import { AdminSettings } from './admin-settings/admin-settings.js';
     AdminCourses,
     AdminFinance,
     AdminSettings,
+    AdminCoupons,
   ],
 })
 export class AdminModule {}

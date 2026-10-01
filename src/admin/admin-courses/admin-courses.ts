@@ -14,6 +14,7 @@ import {
   desc,
   eq,
   profiles,
+  or,
   users,
 } from '../../database/index.js';
 import { z } from 'zod';
@@ -101,6 +102,8 @@ export class AdminCourses {
       .select({
         category: courses.category,
         currency: courses.currency,
+        enrollmentEnabled: courses.enrollmentEnabled,
+        enrollmentEndsAt: courses.enrollmentEndsAt,
         id: courses.id,
         instructorEmail: instructorUsers.email,
         instructorName: instructorProfiles.fullName,
@@ -119,7 +122,9 @@ export class AdminCourses {
         instructorUsers,
         eq(instructorProfiles.userId, instructorUsers.id),
       )
-      .where(eq(courses.status, 'pending_review'))
+      .where(
+        or(eq(courses.status, 'pending_review'), eq(courses.status, 'published')),
+      )
       .orderBy(desc(courses.updatedAt));
     return {
       courses: rows.map((row) => ({
@@ -154,6 +159,52 @@ export class AdminCourses {
       metadata: {},
     });
   }
+
+  async updateCourseCategory(id: string, request: Request) {
+    const profile = await this.admin(request);
+    const input = courseCategorySchema.parse(request.body);
+    const [updated] = await db
+      .update(courses)
+      .set({ category: input.category ?? null })
+      .where(eq(courses.id, id))
+      .returning({ id: courses.id, category: courses.category });
+    if (!updated) throw new NotFoundException('Course not found.');
+    await db.insert(auditLogs).values({
+      actorId: profile.id,
+      action: 'course_category_updated',
+      entityType: 'course',
+      entityId: id,
+      metadata: { category: updated.category },
+    });
+  }
+
+  async updateEnrollmentSettings(id: string, request: Request) {
+    const profile = await this.admin(request);
+    const input = z
+      .object({
+        enrollmentEnabled: z.coerce.boolean(),
+        enrollmentEndsAt: z.string().datetime().nullable(),
+      })
+      .parse(request.body);
+    const [updated] = await db
+      .update(courses)
+      .set({
+        enrollmentEnabled: input.enrollmentEnabled,
+        enrollmentEndsAt: input.enrollmentEndsAt
+          ? new Date(input.enrollmentEndsAt)
+          : null,
+      })
+      .where(eq(courses.id, id))
+      .returning({ id: courses.id });
+    if (!updated) throw new NotFoundException('Course not found.');
+    await db.insert(auditLogs).values({
+      actorId: profile.id,
+      action: 'course_enrollment_settings_updated',
+      entityType: 'course',
+      entityId: id,
+      metadata: input,
+    });
+  }
 }
 
 const categorySchema = z.object({
@@ -166,4 +217,8 @@ const categorySchema = z.object({
     .min(1)
     .max(140)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+});
+
+const courseCategorySchema = z.object({
+  category: z.string().trim().min(1).max(120).nullable(),
 });

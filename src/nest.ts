@@ -10,12 +10,29 @@ import { env } from './config/env.js';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor.js';
 
-export async function createNestHttpApp(): Promise<Express> {
+export async function createNestApplication() {
   const nestApp = await NestFactory.create(AppModule, {
     bodyParser: true,
     cors: false,
   });
-  nestApp.enableCors({ credentials: true, origin: env.CORS_ORIGIN });
+  const allowedOrigins = new Set([
+    ...env.CORS_ORIGIN.split(',').map((origin) => origin.trim()),
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ]);
+  nestApp.enableCors({
+    credentials: true,
+    origin: (
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Origin is not allowed by CORS.'));
+    },
+  });
   nestApp.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -47,6 +64,12 @@ export async function createNestHttpApp(): Promise<Express> {
   );
 
   await nestApp.init();
+
+  return nestApp;
+}
+
+export async function createNestHttpApp(): Promise<Express> {
+  const nestApp = await createNestApplication();
 
   return nestApp.getHttpAdapter().getInstance() as Express;
 }

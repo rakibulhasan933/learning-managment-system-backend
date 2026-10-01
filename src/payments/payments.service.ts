@@ -160,6 +160,8 @@ export class PaymentsService {
     const [course] = await db
       .select({
         currency: courses.currency,
+        enrollmentEnabled: courses.enrollmentEnabled,
+        enrollmentEndsAt: courses.enrollmentEndsAt,
         id: courses.id,
         price: courses.price,
         status: courses.status,
@@ -170,6 +172,10 @@ export class PaymentsService {
       .limit(1);
     if (!course || course.status !== 'published')
       throw new BadRequestException('Course not found.');
+    if (!course.enrollmentEnabled)
+      throw new BadRequestException('Enrollment is currently closed.');
+    if (course.enrollmentEndsAt && course.enrollmentEndsAt <= new Date())
+      throw new BadRequestException('Enrollment for this course has ended.');
     const [existingEnrollment] = await db
       .select({ id: enrollments.id })
       .from(enrollments)

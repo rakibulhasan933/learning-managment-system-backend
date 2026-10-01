@@ -78,13 +78,19 @@ export async function getInstructions(): Promise<ManualPaymentInstructionsDto> {
     rocketNumber: rocket ?? env.MANUAL_PAYMENT_ROCKET_NUMBER ?? null,
   };
 }
+type CouponConfig = {
+  type: 'amount' | 'percent';
+  value: number;
+  limit: number | null;
+  expiresAt: Date | null;
+};
+
 async function coupons() {
-  const result: Record<string, { type: 'amount' | 'percent'; value: number }> =
-    {};
+  const result: Record<string, CouponConfig> = {};
   const configured =
     (await setting('payment_coupons')) ?? env.MANUAL_PAYMENT_COUPONS ?? '';
   for (const entry of configured.split(',')) {
-    const [rawCode, rawType, rawValue] = entry.split(':');
+    const [rawCode, rawType, rawValue, rawState, rawLimit, rawExpiresAt] = entry.split(':');
     const code = rawCode?.trim().toUpperCase();
     const type = rawType?.trim();
     const value = Number(rawValue);
@@ -92,9 +98,20 @@ async function coupons() {
       code &&
       (type === 'amount' || type === 'percent') &&
       Number.isFinite(value) &&
-      value > 0
-    )
-      result[code] = { type, value };
+      value > 0 &&
+      rawState?.trim().toLowerCase() !== 'disabled'
+    ) {
+      const limit = rawLimit ? Number(rawLimit) : null;
+      const expiresAt = rawExpiresAt
+        ? new Date(Number(rawExpiresAt) || rawExpiresAt)
+        : null;
+      result[code] = {
+        type,
+        value,
+        limit: limit && Number.isFinite(limit) && limit > 0 ? limit : null,
+        expiresAt: expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
+      };
+    }
   }
   return result;
 }
@@ -104,6 +121,16 @@ export async function applyCoupon(price: number, couponCode?: string) {
   const code = couponCode.toUpperCase();
   const coupon = (await coupons())[code];
   if (!coupon) throw new BadRequestException('Coupon code is invalid.');
+  if (coupon.expiresAt && coupon.expiresAt.getTime() <= Date.now())
+    throw new BadRequestException('Coupon code has expired.');
+  if (coupon.limit) {
+    const [usage] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(eq(orders.couponCode, code));
+    if (Number(usage?.count ?? 0) >= coupon.limit)
+      throw new BadRequestException('Coupon usage limit has been reached.');
+  }
   const discount =
     coupon.type === 'percent' ? (price * coupon.value) / 100 : coupon.value;
   const discountAmount = Math.min(price, discount);
