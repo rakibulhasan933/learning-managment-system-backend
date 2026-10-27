@@ -558,6 +558,18 @@ export class AuthService {
         .update(users)
         .set({ authProvider: 'password', passwordHash })
         .where(eq(users.id, storedToken.userId));
+      // Unified login: a password reset must log out every device
+      // (web + mobile), otherwise the old mobile session would stay
+      // valid for up to 30 days with the old password's refresh token.
+      await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(refreshTokens.userId, storedToken.userId),
+            isNull(refreshTokens.revokedAt),
+          ),
+        );
       await tx
         .update(passwordResetTokens)
         .set({ usedAt: new Date() })
