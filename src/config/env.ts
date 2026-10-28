@@ -32,7 +32,8 @@ const environmentSchema = z.object({
     .enum(['development', 'test', 'production'])
     .default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
-  CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
+  // Multiple frontend origins are supported and split when CORS is configured.
+  CORS_ORIGIN: z.string().min(1).default('http://localhost:3000'),
   DATABASE_URL: z.string().min(1),
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalNonEmptyString,
