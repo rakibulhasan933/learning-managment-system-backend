@@ -1,4 +1,4 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import type { Request } from 'express';
 import { z, ZodError } from 'zod';
 import type {
@@ -92,6 +92,8 @@ function parseQuery(query: unknown) {
 
 @Injectable()
 export class CoursesService {
+    private readonly logger = new Logger(CoursesService.name);
+
   constructor(private readonly authService: AuthService) {}
 
   async list(queryInput: unknown): Promise<CourseListResponse> {
@@ -342,11 +344,17 @@ export class CoursesService {
         averageRating: Math.round((sum / rows.length) * 10) / 10,
         reviewCount: rows.length,
       };
-    } catch (error) {
-      if (isMissingTableError(error)) {
+      } catch (error) {
+        // Missing table is the expected pre-migration state; anything else
+        // is unexpected but must still not break the course page.
+        if (!isMissingTableError(error)) {
+          this.logger.warn(
+            `courseReviewStats failed for course ${courseId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
         return { averageRating: null, reviewCount: 0 };
-      }
-      throw error;
     }
   }
 }

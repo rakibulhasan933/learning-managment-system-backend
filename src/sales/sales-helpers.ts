@@ -38,13 +38,24 @@ import { db } from '../lib/database.js';
  */
 
 export function isMissingTableError(error: unknown): string | null {
-  const code = (error as { code?: unknown } | null)?.code;
-  const message = error instanceof Error ? error.message : '';
-  if (code === '42P01' || code === '42703') {
-    return /relation "([^"]+)"/.exec(message)?.[1] ?? 'a new feature table';
-  }
-  if (/relation .* does not exist/.test(message)) {
-    return /relation "([^"]+)"/.exec(message)?.[1] ?? 'a new feature table';
+  // Walk the cause chain: drivers and Drizzle sometimes wrap the raw
+  // Postgres error one or more levels deep.
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && !seen.has(current); depth++) {
+    seen.add(current);
+    const code = (current as { code?: unknown } | null)?.code;
+    const message =
+      current instanceof Error ? current.message : String(current ?? '');
+    if (code === '42P01' || code === '42703') {
+      return /relation "([^"]+)"/.exec(message)?.[1] ?? 'a new feature table';
+    }
+    if (/relation .* does not exist/i.test(message)) {
+      return /relation "([^"]+)"/.exec(message)?.[1] ?? 'a new feature table';
+    }
+    const cause = (current as { cause?: unknown } | null)?.cause;
+    if (!cause || cause === current) break;
+    current = cause;
   }
   return null;
 }
