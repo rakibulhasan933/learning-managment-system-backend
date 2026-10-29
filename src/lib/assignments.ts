@@ -2,8 +2,11 @@ import {
   alias,
   and,
   asc,
+  assignmentLateFlags,
   assignmentSubmissions,
   assignments,
+  batchDeadlines,
+  batchMembers,
   courses,
   desc,
   enrollments,
@@ -331,7 +334,74 @@ export async function submitAssignment({
     throw new HttpError(500, 'Assignment submission could not be saved.');
   }
 
-  return toStudentSubmissionDto(submission);
+  // Next batch: late flag. The submission itself is never rejected
+  // for lateness; it is flagged instead. The applicable deadline is
+  // the student's batch deadline for this assignment (strictest one
+  // wins when the student is in several batches), falling back to the
+  // assignment's own dueAt. A penalty is recorded only when a batch
+  // policy sets one (default 0 = no deduction). Best-effort and
+  // swallowed pre-migration (missing assignment_late_flags /
+  // batch_deadlines tables) so submitting keeps working.
+  let isLate = false;
+  let latePenaltyPercent = 0;
+  try {
+    const memberships = await db
+      .select({ batchId: batchMembers.batchId })
+      .from(batchMembers)
+      .where(eq(batchMembers.userId, profileId));
+    let dueAt: Date | null = assignment.dueAt;
+    if (memberships.length) {
+      const deadlines = await db
+        .select()
+        .from(batchDeadlines)
+        .where(
+          and(
+            eq(batchDeadlines.assignmentId, assignmentId),
+            inArray(
+              batchDeadlines.batchId,
+              memberships.map((m) => m.batchId),
+            ),
+          ),
+        )
+        .orderBy(asc(batchDeadlines.dueAt));
+      if (deadlines.length) {
+        dueAt = deadlines[0]!.dueAt;
+        latePenaltyPercent = deadlines[0]!.latePenaltyPercent;
+      }
+    }
+    isLate = dueAt ? submission.submittedAt > dueAt : false;
+    if (isLate) {
+      await db
+        .insert(assignmentLateFlags)
+        .values({
+          assignmentId,
+          isLate: true,
+          latePenaltyPercent,
+          submittedAt: submission.submittedAt,
+          userId: profileId,
+        })
+        .onConflictDoUpdate({
+          set: {
+            isLate: true,
+            latePenaltyPercent,
+            submittedAt: submission.submittedAt,
+          },
+          target: [assignmentLateFlags.assignmentId, assignmentLateFlags.userId],
+        });
+    }
+  } catch {
+    // Pre-migration: the flag row cannot be persisted, but lateness
+    // against the assignment's own dueAt is still reported honestly
+    // in the response; no penalty is applied without a batch policy.
+    isLate = assignment.dueAt ? submission.submittedAt > assignment.dueAt : false;
+    latePenaltyPercent = 0;
+  }
+
+  return {
+    ...toStudentSubmissionDto(submission),
+    isLate,
+    latePenaltyPercent,
+  };
 }
 
 export async function gradeAssignmentSubmission({
@@ -351,6 +421,7 @@ export async function gradeAssignmentSubmission({
     .select({
       assignmentId: assignments.id,
       maxScore: assignments.maxScore,
+      userId: assignmentSubmissions.userId,
     })
     .from(assignmentSubmissions)
     .innerJoin(
@@ -377,11 +448,37 @@ export async function gradeAssignmentSubmission({
     );
   }
 
+  // Next batch: apply a batch late penalty ONLY when a late flag with
+  // a percentage above 0 exists for this student + assignment. The
+  // teacher's raw score is the input every time, so re-grading does
+  // not compound the deduction. Default 0 (or no flag row) = no change.
+  let effectiveScore = gradeScore;
+  try {
+    const [flag] = await db
+      .select()
+      .from(assignmentLateFlags)
+      .where(
+        and(
+          eq(assignmentLateFlags.assignmentId, target.assignmentId),
+          eq(assignmentLateFlags.userId, target.userId),
+          eq(assignmentLateFlags.isLate, true),
+        ),
+      )
+      .limit(1);
+    if (flag && flag.latePenaltyPercent > 0) {
+      effectiveScore = Math.round(
+        (gradeScore * (100 - flag.latePenaltyPercent)) / 100,
+      );
+    }
+  } catch {
+    // Pre-migration: no penalty table, no deduction.
+  }
+
   const [submission] = await db
     .update(assignmentSubmissions)
     .set({
       gradeFeedback,
-      gradeScore,
+      gradeScore: effectiveScore,
       gradedAt: new Date(),
       gradedBy: graderProfileId,
     })

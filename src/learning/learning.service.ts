@@ -60,6 +60,13 @@ export class LearningService {
         403,
       );
     }
+    // Feature set 5: an expired subscription covering this course blocks
+    // access. No-op pre-migration (missing subscriptions table is skipped
+    // inside). ForbiddenException from the helper is an HttpException.
+    const { assertSubscriptionNotExpired } = await import(
+      '../sales/sales-helpers.js'
+    );
+    await assertSubscriptionNotExpired(profile.id, params.courseId);
 
     const [course] = await db
       .select({ id: courses.id, slug: courses.slug, title: courses.title })

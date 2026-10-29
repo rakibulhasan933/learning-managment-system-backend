@@ -12,12 +12,14 @@ import type { Request, Response } from 'express';
 import { toProfileDto } from '../lib/profiles.js';
 import { AuthService } from './auth.service.js';
 import { AuthGuard } from '../common/guards/auth.guard.js';
+import { AuthRateLimitGuard } from '../common/guards/auth-rate-limit.guard.js';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
+  @UseGuards(AuthRateLimitGuard)
   async signup(@Req() request: Request, @Res() response: Response) {
     return this.authService.signup(request.body, response);
   }
@@ -38,6 +40,7 @@ export class AuthController {
   }
 
   @Post('password-reset/request')
+  @UseGuards(AuthRateLimitGuard)
   async requestPasswordReset(
     @Req() request: Request,
     @Res() response: Response,
@@ -46,11 +49,13 @@ export class AuthController {
   }
 
   @Post('verification/resend')
+  @UseGuards(AuthRateLimitGuard)
   async resendVerification(@Req() request: Request, @Res() response: Response) {
     return this.authService.resendVerification(request.body, response);
   }
 
   @Post('password-reset/confirm')
+  @UseGuards(AuthRateLimitGuard)
   async confirmPasswordReset(
     @Req() request: Request,
     @Res() response: Response,
@@ -59,6 +64,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @UseGuards(AuthRateLimitGuard)
   async login(@Req() request: Request, @Res() response: Response) {
     return this.authService.login(request.body, request, response);
   }

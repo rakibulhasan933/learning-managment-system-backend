@@ -43,6 +43,22 @@ export async function createNestApplication() {
   nestApp.useGlobalFilters(new HttpExceptionFilter());
   nestApp.useGlobalInterceptors(new RequestLoggingInterceptor());
 
+  // Preserve the raw multipart body for the question-bank CSV import.
+  // JSON parsing must not consume it first (no multer dependency exists).
+  nestApp.use(
+    '/instructor/question-bank',
+    (request: Request, response: Response, next: NextFunction) => {
+      if (request.path === '/import') {
+        return express.raw({ limit: '5mb', type: () => true })(
+          request,
+          response,
+          next,
+        );
+      }
+      return next();
+    },
+  );
+
   // Preserve binary material uploads for the Nest content controller. JSON
   // parsing must not consume these PDF/slide request bodies first.
   nestApp.use(

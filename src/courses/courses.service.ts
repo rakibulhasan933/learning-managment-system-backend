@@ -12,6 +12,7 @@ import {
   and,
   asc,
   count,
+  courseReviews,
   courses,
   desc,
   enrollments,
@@ -28,6 +29,7 @@ import {
 
 import { AuthService } from '../auth/auth.service.js';
 import { db } from '../lib/database.js';
+import { isMissingTableError } from '../sales/sales-helpers.js';
 
 const courseListQuerySchema = z.object({
   category: z.string().trim().min(1).optional(),
@@ -285,6 +287,7 @@ export class CoursesService {
 
     return {
       ...toCourseSummary(course),
+      ...await this.courseReviewStats(course.id),
       description: course.description,
       sections: sectionRows.map((section) => ({
         id: section.id,
@@ -313,5 +316,37 @@ export class CoursesService {
         title: section.title,
       })),
     };
+  }
+
+  /**
+   * Visible-review aggregate for the public course detail. Graceful when
+   * the reviews migration has not been applied yet: null/0 instead of
+   * 503 so the course page never breaks.
+   */
+  private async courseReviewStats(
+    courseId: string,
+  ): Promise<{ averageRating: number | null; reviewCount: number }> {
+    try {
+      const rows = await db
+        .select({ rating: courseReviews.rating })
+        .from(courseReviews)
+        .where(
+          and(
+            eq(courseReviews.courseId, courseId),
+            eq(courseReviews.isHidden, false),
+          ),
+        );
+      if (!rows.length) return { averageRating: null, reviewCount: 0 };
+      const sum = rows.reduce((total, row) => total + row.rating, 0);
+      return {
+        averageRating: Math.round((sum / rows.length) * 10) / 10,
+        reviewCount: rows.length,
+      };
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        return { averageRating: null, reviewCount: 0 };
+      }
+      throw error;
+    }
   }
 }

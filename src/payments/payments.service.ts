@@ -28,7 +28,7 @@ import { paymentMethods } from '../types/index.js';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service.js';
 import { db } from '../lib/database.js';
-import { createNotification } from '../lib/notifications.js';
+import { createNotification, notifySafely } from '../lib/notifications.js';
 import {
   applyCoupon,
   getInstructions,
@@ -36,6 +36,8 @@ import {
   notifyPaymentApproved,
   verifyPaymentWithPayConfirm,
 } from './payments-helpers.js';
+import { activateOrderExtras } from '../sales/sales-helpers.js';
+import { recordAffiliateCommission } from '../affiliates/affiliates.service.js';
 
 @Injectable()
 export class PaymentsService {
@@ -296,10 +298,29 @@ export class PaymentsService {
         userId: order.studentProfileId,
       })
       .onConflictDoNothing();
+    // Feature set 5: enrol bundle members / order-bump courses and
+    // activate any pending subscription linked to this order. No-op
+    // pre-migration (missing tables are swallowed inside); the PayConfirm
+    // flow itself is unchanged — no manual admin approval is introduced.
+    await activateOrderExtras(id, order.studentProfileId);
+    // Next batch: affiliate commission, ONLY after this PayConfirm
+    // approval made the order paid. No-op pre-migration, no-op without
+    // an attribution, self-referral excluded, one commission per order.
+    // No auto payout is created here.
+    await recordAffiliateCommission(id, order.studentProfileId);
     const updated = await getOrderForViewer(id);
     if (!updated) throw new Error('Updated order could not be loaded.');
     const dto = toPaymentOrder(updated);
     await notifyPaymentApproved(dto);
+    // Best-effort in-app notification. Never throws, so the PayConfirm
+    // flow above is never affected by a notification failure.
+    await notifySafely({
+      body: `Your payment for "${dto.courseTitle}" was confirmed. You are now enrolled.`,
+      href: '/dashboard/student/orders',
+      profileId: order.studentProfileId,
+      title: 'Payment confirmed',
+      type: 'order_paid',
+    });
     const [course] = await db
       .select({
         id: courses.id,

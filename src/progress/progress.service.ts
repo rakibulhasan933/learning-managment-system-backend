@@ -92,6 +92,12 @@ export class ProgressService {
 
     const now = new Date();
     const shouldComplete = input.isCompleted === true;
+    // A position of 0 with no completion is not watching (e.g. merely
+    // opening a learning page). Do not refresh lastWatchedAt for it, or
+    // the streak calculation would count a page view as a learning day.
+    // (A brand-new row still gets the column default; analytics ignores
+    // zero-position, non-completed rows, so it cannot start a streak.)
+    const watched = shouldComplete || input.positionSeconds > 0;
     const [saved] = await db
       .insert(progress)
       .values({
@@ -106,7 +112,7 @@ export class ProgressService {
       .onConflictDoUpdate({
         set: {
           ...(shouldComplete ? { completedAt: now, isCompleted: true } : {}),
-          lastWatchedAt: now,
+          ...(watched ? { lastWatchedAt: now } : {}),
           positionSeconds: input.positionSeconds,
           updatedAt: now,
         },
@@ -141,6 +147,9 @@ export class ProgressService {
 
     const now = new Date();
     const shouldComplete = input.isCompleted === true;
+    // Same rule as lectures: a zero-position, non-completed update is not
+    // watching, so it must not refresh lastWatchedAt (see above).
+    const watched = shouldComplete || input.positionSeconds > 0;
     const [saved] = await db
       .insert(videoProgress)
       .values({
@@ -155,7 +164,7 @@ export class ProgressService {
       .onConflictDoUpdate({
         set: {
           ...(shouldComplete ? { completedAt: now, isCompleted: true } : {}),
-          lastWatchedAt: now,
+          ...(watched ? { lastWatchedAt: now } : {}),
           positionSeconds: input.positionSeconds,
           updatedAt: now,
         },

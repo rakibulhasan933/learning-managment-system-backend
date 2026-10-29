@@ -76,7 +76,11 @@ export class StudentDashboardService {
     }
 
     const lectureRows = await db
-      .select({ courseId: sections.courseId, id: videos.id })
+      .select({
+        courseId: sections.courseId,
+        durationSeconds: videos.durationSeconds,
+        id: videos.id,
+      })
       .from(videos)
       .innerJoin(modules, eq(videos.moduleId, modules.id))
       .innerJoin(sections, eq(modules.milestoneId, sections.id))
@@ -176,7 +180,10 @@ export class StudentDashboardService {
       const completedLectures = courseProgressRows.filter(
         (row) => row.isCompleted,
       ).length;
+      // Same genuine-activity rule as the overall streak: a zero-position,
+      // non-completed row must not set a course's last-activity date.
       const lastActivityAt = courseProgressRows
+        .filter((row) => row.isCompleted || row.positionSeconds > 0)
         .map((row) => row.lastWatchedAt)
         .sort((left, right) => right.getTime() - left.getTime())[0];
 
@@ -192,8 +199,28 @@ export class StudentDashboardService {
       };
     });
 
+    // Genuine watch activity only: a progress row with position 0 that was
+    // never completed is just a page view, not a learning day. Quiz
+    // attempts and assignment submissions are genuine activity on their own.
+    const genuineProgressRows = progressRows.filter(
+      (row) => row.isCompleted || row.positionSeconds > 0,
+    );
+    const durationByLecture = new Map(
+      lectureRows.map((row) => [row.id, row.durationSeconds]),
+    );
+    // Watch time: a completed video counts at least its known duration,
+    // because a completion sent with position 0 (e.g. "Mark complete"
+    // without playing) would otherwise report 0 seconds watched. If the
+    // video has no recorded duration, only the sent position can count.
+    const watchTimeSeconds = progressRows.reduce((total, row) => {
+      const duration = durationByLecture.get(row.lectureId) ?? null;
+      const seconds = row.isCompleted
+        ? Math.max(row.positionSeconds, duration ?? 0)
+        : row.positionSeconds;
+      return total + seconds;
+    }, 0);
     const allActivityDates = [
-      ...progressRows.map((row) => row.lastWatchedAt),
+      ...genuineProgressRows.map((row) => row.lastWatchedAt),
       ...quizAttemptRows.map((row) => row.completedAt),
       ...submissionRows.map((row) => row.updatedAt),
     ];
@@ -261,11 +288,8 @@ export class StudentDashboardService {
         totalQuestions: row.totalQuestions,
       })),
       totalLectures: lectureRows.length,
-      weeklyActivity: createWeeklyActivity(progressRows),
-      watchTimeSeconds: progressRows.reduce(
-        (total, row) => total + row.positionSeconds,
-        0,
-      ),
+      weeklyActivity: createWeeklyActivity(genuineProgressRows),
+      watchTimeSeconds,
     } satisfies StudentAnalyticsResponse;
   }
 }

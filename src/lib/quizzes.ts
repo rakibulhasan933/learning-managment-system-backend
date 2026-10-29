@@ -230,6 +230,19 @@ export async function assertActiveEnrollment(
   if (!enrollment) {
     throw new HttpError(403, 'Active enrollment is required.');
   }
+  // Feature set 5: an expired subscription covering this course blocks
+  // access. No-op pre-migration (missing subscriptions table is skipped
+  // inside), so existing enrolments keep working until migration.
+  const { assertSubscriptionNotExpired } = await import(
+    '../sales/sales-helpers.js'
+  );
+  try {
+    await assertSubscriptionNotExpired(profileId, courseId);
+  } catch (error) {
+    // ForbiddenException from the helper already carries status 403.
+    if ((error as { status?: unknown } | null)?.status === 403) throw error;
+    throw new HttpError(403, 'Your subscription for this course has expired.');
+  }
 }
 
 export async function getQuizCourseId(quizId: string) {

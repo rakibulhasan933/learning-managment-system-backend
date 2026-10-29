@@ -12,6 +12,7 @@ import {
   auditLogs,
   courses,
   desc,
+  enrollments,
   eq,
   orders,
   payoutRequests,
@@ -22,6 +23,7 @@ import {
 import { z } from 'zod';
 import { AuthService } from '../../auth/auth.service.js';
 import { db } from '../../lib/database.js';
+import { notifySafely } from '../../lib/notifications.js';
 
 const idSchema = z.string().uuid();
 const rejectSchema = z.object({
@@ -129,7 +131,10 @@ export class AdminFinance {
       .where(
         and(eq(payoutRequests.id, id), eq(payoutRequests.status, expected)),
       )
-      .returning({ id: payoutRequests.id });
+      .returning({
+        id: payoutRequests.id,
+        instructorId: payoutRequests.instructorId,
+      });
     if (!updated)
       throw new NotFoundException(
         `${action === 'paid' ? 'Approved' : 'Pending'} payout request not found.`,
@@ -140,6 +145,20 @@ export class AdminFinance {
       entityType: 'payout',
       entityId: id,
       metadata: {},
+    });
+    // Best-effort in-app notification to the instructor. Never throws.
+    const payoutLabel =
+      action === 'approve'
+        ? 'approved'
+        : action === 'reject'
+          ? 'rejected'
+          : 'marked as paid';
+    await notifySafely({
+      body: `Your payout request was ${payoutLabel}.`,
+      href: '/dashboard/instructor/payouts',
+      profileId: updated.instructorId,
+      title: `Payout ${payoutLabel}`,
+      type: 'payout_decided',
     });
   }
   async listRefunds(request: Request) {
@@ -240,8 +259,18 @@ export class AdminFinance {
         status,
       })
       .where(eq(refunds.id, id))
-      .returning({ id: refunds.id });
+      .returning({ id: refunds.id, orderId: refunds.orderId });
     if (!updated) throw new NotFoundException('Refund not found.');
+    if (status === 'approved') {
+      // Access is revoked on approval: every enrolment granted by this
+      // order (bundle/add-on enrolments all carry the order id) moves to
+      // revoked with a timestamp. Money movement stays manual — no code
+      // touches payments here.
+      await db
+        .update(enrollments)
+        .set({ revokedAt: new Date(), status: 'revoked' })
+        .where(eq(enrollments.orderId, updated.orderId));
+    }
     await db.insert(auditLogs).values({
       actorId: profile.id,
       action: `refund_${action}d`,
@@ -249,5 +278,38 @@ export class AdminFinance {
       entityId: id,
       metadata: {},
     });
+    // Best-effort in-app notification to the student. Never throws.
+    await this.notifyRefundDecided(updated.orderId, status);
+  }
+
+  private async notifyRefundDecided(orderId: string, status: string) {
+    try {
+      const [order] = await db
+        .select({ courseId: orders.courseId, userId: orders.userId })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+      if (!order) return;
+      const [course] = await db
+        .select({ title: courses.title })
+        .from(courses)
+        .where(eq(courses.id, order.courseId))
+        .limit(1);
+      const label =
+        status === 'approved'
+          ? 'approved'
+          : status === 'rejected'
+            ? 'rejected'
+            : 'processed';
+      await notifySafely({
+        body: `Your refund request for "${course?.title ?? 'the course'}" was ${label}.`,
+        href: '/dashboard/student/orders',
+        profileId: order.userId,
+        title: `Refund ${label}`,
+        type: 'refund_decided',
+      });
+    } catch (error) {
+      console.error('Refund-decision notification failed.', error);
+    }
   }
 }

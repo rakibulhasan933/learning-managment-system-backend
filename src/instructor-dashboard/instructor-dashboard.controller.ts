@@ -106,6 +106,42 @@ export class InstructorDashboardController {
       );
   }
 
+  @Get('seller-dashboard')
+  async sellerDashboard(@Req() request: Request, @Res() response: Response) {
+    return response
+      .status(200)
+      .json(await this.instructorDashboardService.sellerDashboard(request));
+  }
+
+  @Get('seller-dashboard/export')
+  async sellerDashboardExport(
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    const csv =
+      await this.instructorDashboardService.sellerDashboardExport(request);
+    return response
+      .status(200)
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header(
+        'Content-Disposition',
+        'attachment; filename="seller-students.csv"',
+      )
+      .send(csv);
+  }
+
+  @Post('seller-dashboard/announcement-draft')
+  async sellerAnnouncementDraft(
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    return response
+      .status(200)
+      .json(
+        await this.instructorDashboardService.sellerAnnouncementDraft(request),
+      );
+  }
+
   @Get('payouts')
   async payouts(@Req() request: Request, @Res() response: Response) {
     return response

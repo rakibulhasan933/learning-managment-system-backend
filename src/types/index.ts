@@ -49,6 +49,20 @@ export const paymentMethods = [
 ] as const;
 export type PaymentMethod = (typeof paymentMethods)[number];
 
+export const subscriptionStatuses = [
+  'pending',
+  'active',
+  'expired',
+  'cancelled',
+] as const;
+export type SubscriptionStatus = (typeof subscriptionStatuses)[number];
+
+export const instalmentStatuses = ['pending', 'paid', 'overdue'] as const;
+export type InstalmentStatus = (typeof instalmentStatuses)[number];
+
+export const questionDifficulties = ['easy', 'medium', 'hard'] as const;
+export type QuestionDifficulty = (typeof questionDifficulties)[number];
+
 export const payoutStatuses = [
   'pending',
   'approved',
@@ -124,6 +138,8 @@ export interface CourseSectionSummaryDto {
 export interface CourseDetailDto extends CourseSummaryDto {
   description: string | null;
   sections: CourseSectionSummaryDto[];
+  averageRating: number | null;
+  reviewCount: number;
 }
 
 export interface CourseListResponse {
@@ -591,6 +607,13 @@ export interface CertificateDownloadResponse {
   downloadUrl: string;
 }
 
+export interface CertificateVerificationResponse {
+  valid: boolean;
+  studentName: string | null;
+  courseTitle: string | null;
+  issuedAt: string | null;
+}
+
 export interface AdminUserDto {
   id: string;
   profileId: string;
@@ -878,4 +901,180 @@ export interface AnnouncementDto {
 
 export interface AnnouncementListResponse {
   announcements: AnnouncementDto[];
+}
+
+/** Feature set 5 response shapes (bundles, sales, question bank, model tests). */
+export interface BundleDto {
+  id: string;
+  title: string;
+  courseIds: string[];
+  price: string;
+  originalPrice: string | null;
+  currency: string;
+  durationDays: number | null;
+  instructorId: string;
+  isPublished: boolean;
+  description: string | null;
+}
+
+export interface BundleListResponse {
+  bundles: BundleDto[];
+}
+
+export interface InstalmentDto {
+  id: string;
+  amount: string;
+  dueDate: string;
+  status: InstalmentStatus | 'overdue';
+  paidAt: string | null;
+  transactionId: string | null;
+}
+
+export interface InstalmentScheduleResponse {
+  orderId: string;
+  orderAmount: string | null;
+  paidTotal: string;
+  accessRule: string;
+  instalments: InstalmentDto[];
+}
+
+export interface QuestionBankOptionDto {
+  id: string;
+  optionText: string;
+  position: number;
+  isCorrect: boolean;
+}
+
+export interface QuestionBankQuestionDto {
+  id: string;
+  questionText: string;
+  explanation: string | null;
+  subject: string | null;
+  chapter: string | null;
+  topic: string | null;
+  difficulty: QuestionDifficulty;
+  courseId: string | null;
+  options: QuestionBankOptionDto[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuestionImportReport {
+  imported: number;
+  skipped: number;
+  errors: Array<{ line: number; reason: string }>;
+  attachedToTestId: string | null;
+}
+
+export interface ModelTestAttemptQuestionDto {
+  id: string;
+  questionText: string;
+  subject: string | null;
+  chapter: string | null;
+  topic: string | null;
+  difficulty: QuestionDifficulty | null;
+  options: Array<{ id: string; optionText: string }>;
+}
+
+export interface ModelTestAttemptResponse {
+  attemptId: string;
+  testId: string;
+  title: string;
+  durationMinutes: number;
+  startedAt: string;
+  expiresAt: string;
+  questions: ModelTestAttemptQuestionDto[];
+}
+
+export interface ModelTestSubmissionResponse {
+  attemptId: string;
+  testId: string;
+  score: number;
+  totalQuestions: number;
+  correctCount: number;
+  wrongCount: number;
+  blankCount: number;
+  percentage: number;
+  negativeMark: number;
+  negativeMarkApplied: number;
+  topicBreakdown: Record<
+    string,
+    { correct: number; wrong: number; blank: number; total: number }
+  >;
+  wrongQuestionIds: string[];
+  submittedLate: boolean;
+  finishedInSeconds: number;
+}
+
+export interface LeaderboardEntryDto {
+  rank: number;
+  userId: string;
+  studentName: string | null;
+  score: number;
+  finishedInSeconds: number | null;
+  submittedAt: string;
+}
+
+// ---------------- notifications + messaging ----------------
+
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  href: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationDto[];
+  unreadCount: number;
+}
+
+export interface MessageThreadListEntryDto {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  otherPartyName: string | null;
+  otherPartyRole: string;
+  subject: string;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  unreadCount: number;
+}
+
+export interface MessageThreadListResponse {
+  threads: MessageThreadListEntryDto[];
+}
+
+export interface MessageThreadDto {
+  id: string;
+  courseId: string;
+  courseTitle: string | null;
+  otherPartyName: string | null;
+  otherPartyRole: string | null;
+  subject: string;
+  lastMessageAt: string | null;
+}
+
+export interface MessageDto {
+  id: string;
+  threadId: string;
+  senderId: string;
+  senderName: string | null;
+  senderRole: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface MessageThreadDetailResponse {
+  thread: MessageThreadDto;
+  messages: MessageDto[];
+}
+
+export interface BroadcastResponse {
+  threadsCreated: number;
+  notified: number;
 }

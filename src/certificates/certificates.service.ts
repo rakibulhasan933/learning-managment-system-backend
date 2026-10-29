@@ -6,6 +6,7 @@ import type {
   CertificateDownloadResponse,
   CertificateDto,
   CertificateListResponse,
+  CertificateVerificationResponse,
 } from '../types/index.js';
 import {
   and,
@@ -173,6 +174,50 @@ export class CertificatesService {
     for (const courseId of await this.completedCourseIds(profileId)) {
       await this.issueCertificate(profileId, courseId);
     }
+  }
+
+  /**
+   * Public verification: anyone with a code printed on a certificate PDF
+   * can check it. Codes are generated as `CERT-<uppercase hex>`, so the
+   * input is trimmed and uppercased before an exact match. Only the four
+   * contracted fields are returned — no email, order, certificate URL or
+   * internal ids.
+   */
+  async verify(codeInput: string): Promise<CertificateVerificationResponse> {
+    const code = codeInput.trim().toUpperCase();
+    if (!code) {
+      return {
+        courseTitle: null,
+        issuedAt: null,
+        studentName: null,
+        valid: false,
+      };
+    }
+    const [row] = await db
+      .select({
+        courseTitle: courses.title,
+        issuedAt: certificates.issuedAt,
+        studentName: profiles.fullName,
+      })
+      .from(certificates)
+      .innerJoin(courses, eq(certificates.courseId, courses.id))
+      .innerJoin(profiles, eq(certificates.userId, profiles.id))
+      .where(eq(certificates.verificationCode, code))
+      .limit(1);
+    if (!row) {
+      return {
+        courseTitle: null,
+        issuedAt: null,
+        studentName: null,
+        valid: false,
+      };
+    }
+    return {
+      courseTitle: row.courseTitle,
+      issuedAt: row.issuedAt.toISOString(),
+      studentName: row.studentName,
+      valid: true,
+    };
   }
 
   async list(request: Request): Promise<CertificateListResponse> {
