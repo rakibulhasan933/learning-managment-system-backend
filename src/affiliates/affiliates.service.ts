@@ -345,7 +345,11 @@ export class AffiliatesService {
         throw new BadRequestException('You cannot refer yourself.');
       }
       const [order] = await db
-        .select({ status: orders.status, userId: orders.userId })
+        .select({
+          courseId: orders.courseId,
+          status: orders.status,
+          userId: orders.userId,
+        })
         .from(orders)
         .where(eq(orders.id, input.orderId))
         .limit(1);

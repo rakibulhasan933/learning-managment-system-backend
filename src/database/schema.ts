@@ -1,8 +1,7 @@
-import { relations, sql } from 'drizzle-orm';
+import { inArray, relations, sql } from 'drizzle-orm';
 import {
   boolean,
   check,
-  inArray,
   index,
   integer,
   jsonb,

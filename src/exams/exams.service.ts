@@ -22,6 +22,8 @@ import {
   modelTests,
   questionBankOptions,
   questionBankQuestions,
+  profiles,
+  users,
 } from '../database/index.js';
 import { AuthService } from '../auth/auth.service.js';
 import { db } from '../lib/database.js';
