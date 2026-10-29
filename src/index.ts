@@ -1,23 +1,20 @@
-// Keep the Nest import visible to Vercel's NestJS entrypoint detector.
+// Vercel detects this conventional NestJS entrypoint and manages the HTTP
+// server lifecycle for the deployed function.
 import { NestFactory } from '@nestjs/core';
-import { env } from './config/env.js';
+
 import { createNestApplication } from './nest.js';
 
 void NestFactory;
 
-const app = await createNestApplication();
-await app.listen(env.PORT);
-const server = app.getHttpServer();
-console.info(`NestJS backend listening on port ${env.PORT}`);
+async function bootstrap() {
+  const app = await createNestApplication();
+  const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
-function shutdown(signal: NodeJS.Signals) {
-  server.close((error: Error | undefined) => {
-    if (error) {
-      console.error(`${signal}: failed to close backend server`, error);
-      process.exitCode = 1;
-    }
-  });
+  await app.listen(port);
+  console.info(`NestJS backend listening on port ${port}`);
 }
 
-process.once('SIGINT', () => shutdown('SIGINT'));
-process.once('SIGTERM', () => shutdown('SIGTERM'));
+void bootstrap().catch((error: unknown) => {
+  console.error('NestJS backend failed to start', error);
+  process.exitCode = 1;
+});
