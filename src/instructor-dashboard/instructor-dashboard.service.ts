@@ -543,7 +543,7 @@ export class InstructorDashboardService {
       .filter((row) => ['approved', 'processed'].includes(row.status))
       .reduce((sum, row) => sum + Number(row.amount), 0);
     const byMethod = new Map<string, { count: number; total: number }>();
-    for (const row of orderRows) {
+    for (const row of paidOrders) {
       const key = row.paymentMethod ?? 'unknown';
       const entry = byMethod.get(key) ?? { count: 0, total: 0 };
       entry.count += 1;
@@ -554,7 +554,7 @@ export class InstructorDashboardService {
       string,
       { couponCode: string; discountGiven: number; revenue: number; uses: number }
     >();
-    for (const row of orderRows) {
+    for (const row of paidOrders) {
       if (!row.couponCode) continue;
       const entry = byCoupon.get(row.couponCode) ?? {
         couponCode: row.couponCode,
